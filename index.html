@@ -100,6 +100,13 @@ body.cockpit #map, body.cockpit #hudBC, body.cockpit #hudBL{display:none}
 #tGas{width:120px;height:96px}
 body.trial #tGas{display:none}
 body.trial #tBrake{grid-column:1 / span 2;width:140px;height:100px}
+#tClimb,#tDive{display:none}
+/* split layout: stick = turn + thrust/brake, right side = climb / dive / boost (like WASD + arrows) */
+body.tl-split #tGas, body.tl-split #tBrake{display:none}
+body.tl-split #tClimb, body.tl-split #tDive{display:block;width:118px;height:78px}
+body.tl-split #tBoost{grid-column:1;grid-row:1 / span 2;width:84px;height:auto}
+body.tl-split #tClimb{grid-column:2;grid-row:1}
+body.tl-split #tDive{grid-column:2;grid-row:2}
 
 /* ---------- panels ---------- */
 .panel{position:fixed;left:var(--sl);bottom:calc(20px + var(--sb));width:min(440px,calc(100vw - 32px));box-sizing:border-box;border-radius:22px;padding:26px 26px 22px;display:flex;flex-direction:column;gap:18px;
@@ -151,6 +158,12 @@ kbd{font-family:var(--f-mono);font-size:10.5px;padding:1px 6px;border-radius:5px
 .keybtn.empty{color:var(--mute)}
 .keybtn.listen{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);animation:blink 1s ease-in-out infinite}
 @keyframes blink{50%{opacity:.55}}
+.ctl-sec{display:flex;flex-direction:column;gap:10px}
+.layouts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.layout{display:flex;flex-direction:column;gap:5px;text-align:left;padding:13px 14px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid var(--faint);cursor:pointer}
+.layout b{font-family:var(--f-display);font-size:15px}
+.layout span{font-size:12px;line-height:1.4;color:var(--mute)}
+.layout.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
 .toggle{display:flex;align-items:center;gap:10px;font-size:13.5px;cursor:pointer}
 .toggle input{width:18px;height:18px;accent-color:var(--accent);margin:0}
 @media (max-width:520px){ .panel{padding:20px 18px 18px;gap:14px} h1{font-size:46px} }
@@ -183,11 +196,13 @@ kbd{font-family:var(--f-mono);font-size:10.5px;padding:1px 6px;border-radius:5px
 <div id="toast" class="glass"></div>
 
 <div id="touch" hidden>
-  <div id="stick" class="glass"><span class="stickHint" style="top:9px">UP</span><span class="stickHint" style="bottom:9px">DOWN</span><div id="stickKnob"></div></div>
+  <div id="stick" class="glass"><span class="stickHint" id="hintUp" style="top:9px">UP</span><span class="stickHint" id="hintDown" style="bottom:9px">DOWN</span><div id="stickKnob"></div></div>
   <div id="pedals">
     <button class="pad glass" id="tBoost">Boost</button>
     <button class="pad glass" id="tBrake">Brake</button>
     <button class="pad glass" id="tGas">Thrust</button>
+    <button class="pad glass" id="tClimb">▲ Climb</button>
+    <button class="pad glass" id="tDive">▼ Dive</button>
   </div>
 </div>
 
@@ -208,11 +223,21 @@ kbd{font-family:var(--f-mono);font-size:10.5px;padding:1px 6px;border-radius:5px
 
 <section id="controls" class="panel" hidden>
   <div>
-    <div class="eyebrow">Keyboard</div>
+    <div class="eyebrow">Settings</div>
     <h2>Controls</h2>
-    <p class="tag">Click a key, then press the new one. Backspace clears it, Esc cancels. Each action can have two keys.</p>
   </div>
-  <div id="ctlRows"></div>
+  <div id="ctlTouch" class="ctl-sec">
+    <span class="lbl">Touch layout</span>
+    <div class="layouts">
+      <button class="layout" id="tlStick"><b>Flight stick</b><span>Stick turns and climbs. Thrust, Brake and Boost on the right.</span></button>
+      <button class="layout" id="tlSplit"><b>Keyboard style</b><span>Stick turns, push up to thrust, pull down to brake. Climb, Dive and Boost on the right.</span></button>
+    </div>
+  </div>
+  <div id="ctlKeys" class="ctl-sec">
+    <span class="lbl">Keyboard</span>
+    <p class="tag" style="margin:0">Click a key, then press the new one. Backspace clears it, Esc cancels. Each action can have two keys.</p>
+    <div id="ctlRows"></div>
+  </div>
   <label class="toggle"><input type="checkbox" id="invertY"><span>Invert climb and dive</span></label>
   <div class="row"><button class="btn" id="ctlReset">Reset to defaults</button><button class="btn primary" id="ctlDone">Done</button></div>
 </section>
@@ -961,7 +986,7 @@ const tmpF = newFrame(), tmpA = newFrame();
 
 /* ================= INPUT ================= */
 const keys = new Set();
-const touch = { x:0, y:0, gas:false, brake:false, boost:false };
+const touch = { x:0, y:0, gas:false, brake:false, boost:false, climb:false, dive:false };
 
 // ---- rebindable keyboard controls (two slots per action, saved on this device). Esc is reserved for pause/cancel.
 const ACTIONS = [
@@ -979,7 +1004,7 @@ function loadBinds(){
   return b;
 }
 let binds = loadBinds();
-const settings = Object.assign({ invertY:false }, store.get('settings') || {});
+const settings = Object.assign({ invertY:false, touchLayout:'stick' }, store.get('settings') || {});
 const held = a => binds[a].some(c => c && keys.has(c));
 const actionFor = code => { for (const [a] of ACTIONS) if (binds[a].includes(code)) return a; return null; };
 const KEY_NAMES = { ArrowUp:'↑', ArrowDown:'↓', ArrowLeft:'←', ArrowRight:'→', Space:'Space', ShiftLeft:'L Shift', ShiftRight:'R Shift',
@@ -1020,13 +1045,16 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 function readInput(){
+  const split = settings.touchLayout === 'split';
   const turn = (held('right') ? 1 : 0) - (held('left') ? 1 : 0);
-  const climb = ((held('climb') ? 1 : 0) - (held('dive') ? 1 : 0) + touch.y) * (settings.invertY ? -1 : 1);
+  // split layout: stick up/down is thrust/brake, and climb/dive come from the two buttons
+  const touchClimb = split ? (touch.climb ? 1 : 0) - (touch.dive ? 1 : 0) : touch.y;
+  const climb = ((held('climb') ? 1 : 0) - (held('dive') ? 1 : 0) + touchClimb) * (settings.invertY ? -1 : 1);
   return {
     turn: clamp(turn + touch.x, -1, 1),
     climb: clamp(climb, -1, 1),
-    gas: held('thrust') || touch.gas,
-    brake: held('brake') || touch.brake,
+    gas: held('thrust') || touch.gas || (split && touch.y > 0.35),
+    brake: held('brake') || touch.brake || (split && touch.y < -0.35),
     boost: held('boost') || touch.boost,
   };
 }
@@ -1052,6 +1080,7 @@ function bindHold(el, key){
   el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
 }
 bindHold($('tGas'), 'gas'); bindHold($('tBrake'), 'brake'); bindHold($('tBoost'), 'boost');
+bindHold($('tClimb'), 'climb'); bindHold($('tDive'), 'dive');
 { const pad = $('stick'), knob = $('stickKnob'); let pid = null;
   const setFrom = e => { const r = pad.getBoundingClientRect(), R = r.width*0.36;
     let dx = (e.clientX - (r.left + r.width/2)) / R, dy = (e.clientY - (r.top + r.height/2)) / R;
@@ -1120,7 +1149,12 @@ function showPanel(p){ for (const k of ['menu','trial','results','pause','contro
 function syncUI(){
   const playing = game.state !== 'menu';
   const panelOpen = !ui.menu.hidden || !ui.trial.hidden || !ui.results.hidden || !ui.pause.hidden || !ui.controls.hidden;
-  $('mControls').hidden = touchUI; $('pControls').hidden = touchUI;
+  const split = settings.touchLayout === 'split';
+  document.body.classList.toggle('tl-split', split);
+  $('hintUp').textContent = split ? 'THRUST' : 'UP';
+  $('hintDown').textContent = split ? 'BRAKE' : 'DOWN';
+  $('ctlTouch').hidden = !touchUI; $('ctlKeys').hidden = touchUI;
+  $('mControls').textContent = touchUI ? 'Change touch controls →' : 'Change keyboard controls →';
   ui.hud.classList.toggle('off', !playing || game.hudHidden);
   ui.touch.hidden = !(touchUI && playing && !panelOpen && !game.hudHidden && game.state !== 'finished');
   document.body.classList.toggle('trial', game.mode === 'trial');
@@ -1139,7 +1173,9 @@ function buildMenu(){
     b.innerHTML = `<i style="background:linear-gradient(135deg,${hex(e.neb1)},${hex(e.accent)})"></i>${e.name}`;
     b.onclick = () => switchEnv(i); wrap.appendChild(b); });
   $('keysHint').innerHTML = touchUI
-    ? '<span>Left stick turns and climbs. Thrust, Brake and Boost on the right. The camera button switches to the cockpit.</span>'
+    ? (settings.touchLayout === 'split'
+        ? '<span>Stick turns, push up to thrust, pull down to brake. Climb, Dive and Boost on the right.</span>'
+        : '<span>Left stick turns and climbs. Thrust, Brake and Boost on the right. The camera button switches to the cockpit.</span>')
     : [['thrust','brake','thrust / brake'], ['left','right','turn'], ['climb','dive','climb / dive'], ['boost',null,'boost'], ['camera',null,'camera'], ['sky',null,'sky'], ['autopilot',null,'autopilot']]
         .map(([a, b, t]) => `<span><kbd>${keyLabel(binds[a][0] || binds[a][1])}</kbd>${b ? `<kbd>${keyLabel(binds[b][0] || binds[b][1])}</kbd>` : ''} ${t}</span>`).join('');
 }
@@ -1160,7 +1196,12 @@ function renderControls(){
     }
   }
   $('invertY').checked = settings.invertY;
+  $('tlStick').classList.toggle('on', settings.touchLayout !== 'split');
+  $('tlSplit').classList.toggle('on', settings.touchLayout === 'split');
 }
+function setTouchLayout(l){ settings.touchLayout = l; store.set('settings', settings); renderControls(); buildMenu(); syncUI(); }
+$('tlStick').onclick = () => setTouchLayout('stick');
+$('tlSplit').onclick = () => setTouchLayout('split');
 $('mControls').onclick = () => openControls('menu');
 $('pControls').onclick = () => openControls('pause');
 $('ctlDone').onclick = closeControls;

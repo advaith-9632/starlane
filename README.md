@@ -27,7 +27,10 @@ There are five skies to switch between: Nebula Drift, Amber Reach, Glacier Belt,
 | Restart run (Time Trial) | R |
 | Pause | Esc |
 
-**iPad / touch**: the joystick on the left turns and climbs. Thrust, Brake and Boost are on the right.
+**iPad / touch**: two layouts, switchable under *Change touch controls* in the menu:
+
+- **Flight stick** (default): the stick turns and climbs. Thrust, Brake and Boost are on the right.
+- **Keyboard style**: the stick turns, push up to thrust, pull down to brake. Climb, Dive and Boost are on the right.
 
 ## Running it locally
 
