@@ -187,6 +187,9 @@ kbd{font-family:var(--f-mono);font-size:10.5px;padding:1px 6px;border-radius:5px
 #boostFill{background:linear-gradient(90deg,var(--accent2),var(--accent))}
 #boostTrack.locked i{background:repeating-linear-gradient(45deg,#ff5a6a 0 6px,#8c2a35 6px 12px)}
 #boostLbl.locked{color:var(--bad)}
+#jumpFill{background:#d9defa}
+#jumpFill.cool{background:rgba(217,222,250,.35)}
+.pad.cool{opacity:.4}
 #hurt{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(255,40,60,.6))}
 #lock{position:absolute;left:0;top:0;width:60px;height:60px;will-change:transform}
 #lock .lk-box{position:absolute;inset:0;--c:var(--accent);transition:opacity .15s;
@@ -270,6 +273,7 @@ body.touch #mpList{top:calc(210px + var(--st));right:auto;left:var(--sl)}
     <div class="bars">
       <div class="bar"><span class="lbl">Shield</span><div class="track"><i id="shieldFill"></i></div></div>
       <div class="bar"><span class="lbl" id="boostLbl">Boost</span><div class="track" id="boostTrack"><i id="boostFill"></i></div></div>
+      <div class="bar"><span class="lbl" id="jumpLbl">Jump</span><div class="track"><i id="jumpFill"></i></div></div>
     </div>
   </div>
   <div id="hudBL"><span class="lbl">Distance flown</span><b id="dist">0.00 km</b></div>
@@ -475,6 +479,30 @@ const ENVS = [
     fog:0x220709, fogD:0.00065, accent:0xff3d5a, accent2:0xffa63d, rock:0x5a3030, rockN:13, shards:false,
     planet:{dir:[-0.7,0.36,-0.6], r:520, c1:0x3a1010, c2:0xb04a32, atmo:0xff7050, bands:10, ring:false},
     exposure:1.0, bloom:1.0 },
+  { name:'Ion Storm', sub:'Electric blue clouds and a banded storm world',
+    bg:0x02051a, neb1:0x2a46d8, neb2:0x6fd6ff, nebAmt:1.0, stars:1.2, band:[0.5,1,-0.3],
+    sun:0xcfe0ff, sunDir:[-0.7,0.45,0.4], sunSize:0.8, sunI:2.2,
+    fog:0x08123a, fogD:0.00066, accent:0x7fb2ff, accent2:0xc48bff, rock:0x3a4466, rockN:12, shards:true,
+    planet:{dir:[0.58,0.12,-0.8], r:820, c1:0x1d2b6b, c2:0xa9c6ff, atmo:0x8fb8ff, bands:30, ring:false},
+    exposure:0.95, bloom:0.95 },
+  { name:'Rose Quartz', sub:'Soft pink dust around a pearl giant',
+    bg:0x150a12, neb1:0xb0506f, neb2:0xffcfae, nebAmt:0.95, stars:0.6, band:[-0.1,1,0.5],
+    sun:0xfff0e6, sunDir:[0.3,0.25,-0.92], sunSize:1.4, sunI:3.0,
+    fog:0x3a1c2a, fogD:0.00058, accent:0xff8fb8, accent2:0xffc59a, rock:0xc79aa6, rockN:14, shards:false,
+    planet:{dir:[-0.55,0.32,-0.77], r:880, c1:0xd9b8c4, c2:0xfff1ea, atmo:0xffd9e6, bands:16, ring:true, ringColor:0xf6d8d0, ringTilt:0.25},
+    exposure:1.05, bloom:0.85 },
+  { name:'Event Horizon', sub:'A black hole wrapped in a burning ring',
+    bg:0x010101, neb1:0x2a1208, neb2:0xff8a3a, nebAmt:0.35, stars:1.3, band:[0.2,1,0.2],
+    sun:0xffb070, sunDir:[0.27,0.39,-0.88], sunSize:0.5, sunI:1.6,
+    fog:0x0c0604, fogD:0.0006, accent:0xff9a40, accent2:0xffd37a, rock:0x2a2420, rockN:10, shards:false,
+    planet:{dir:[0.25,0.36,-0.9], r:950, c1:0x000000, c2:0x050302, atmo:0xff7a2a, bands:2, ring:true, ringColor:0xffa050, ringTilt:0.12, ringGlow:3.2},
+    exposure:1.05, bloom:1.1 },
+  { name:'Coral Reef', sub:'Teal currents and coral-coloured clouds',
+    bg:0x03100f, neb1:0x0f6b73, neb2:0xff7b54, nebAmt:0.9, stars:0.9, band:[0.3,1,-0.5],
+    sun:0xfff2d8, sunDir:[-0.6,0.22,-0.77], sunSize:1.1, sunI:2.8,
+    fog:0x082624, fogD:0.00064, accent:0xff7b54, accent2:0x3ee0d0, rock:0x4c6a66, rockN:16, shards:true,
+    planet:{dir:[0.5,0.28,-0.82], r:760, c1:0x0c5a5a, c2:0xffb48a, atmo:0x7ff5e6, bands:9, ring:false},
+    exposure:1.0, bloom:0.9 },
 ];
 
 /* ================= RENDERER ================= */
@@ -720,6 +748,7 @@ function stats(){
   };
 }
 let ST = stats();
+const JUMP_CD = 1.6, JUMP_V = 95;
 const BOOST_UNLOCK = 0.3, JUMP_COST = 0.2, RAM_SPEED = 140, SHIP_R = 2.3, LOCK_TIME = 0.25, GATE_LEEWAY = 5;
 const ramPower = v => (v - 110) / 6;
 const hpFor = sc => Math.max(1, Math.round(sc*sc/12));
@@ -1305,7 +1334,7 @@ function applyEnv(i){
   planetU.uC1.value.set(p.c1); planetU.uC2.value.set(p.c2); planetU.uAtmo.value.set(p.atmo); planetU.uBands.value = p.bands;
   atmoU.uColor.value.set(p.atmo); atmoU.uR.value = p.r;
   pRing.visible = !!p.ring;
-  if (p.ring) { ringU.uColor.value.set(p.ringColor); pRing.rotation.set(-Math.PI/2 + p.ringTilt, 0.3, 0); }
+  if (p.ring) { ringU.uColor.value.set(p.ringColor).multiplyScalar(p.ringGlow || 1); pRing.rotation.set(-Math.PI/2 + p.ringTilt, 0.3, 0); }
   planet.rotation.set(0.2, 0, p.ring ? p.ringTilt*0.5 : 0.15);
   renderer.toneMappingExposure = e.exposure;
   bloom.strength = e.bloom * 0.7;
@@ -1338,7 +1367,7 @@ function switchEnv(i){ if (i === envIndex && fade.pending < 0) return; fade.pend
 const ship = {
   pos:new V3(), vel:new V3(), fwd:new V3(0,0,-1), right:new V3(1,0,0), upNR:new V3(0,1,0),
   yaw:0, pitch:0, roll:0, yawRate:0, pitchRate:0, v:0, turn:0, climb:0,
-  boost:1, boostLock:false, wasBoosting:false, overdrive:0, burst:0, jumpV:0, jumpCd:0,
+  boost:1, boostLock:false, wasBoosting:false, overdrive:0, burst:0, jumpV:0, jumpCd:0, jumpDisp:0, pitchKick:0,
   shield:100, stall:0, s:0, off:0, odo:0,
 };
 const game = {
@@ -1634,7 +1663,7 @@ const SFX = {
   boostStart(){ const t = now(); noiseHit({ t, d:0.55, v:0.2, filt:['bandpass',300], f2:3200, q:0.9 }); tone({ type:'sawtooth', f:90, f2:260, t, d:0.5, v:0.05, filt:['lowpass',900] }); },
   boostEmpty(){ const t = now(); tone({ type:'triangle', f:520, f2:140, t, d:0.35, v:0.08 }); noiseHit({ t, d:0.25, v:0.1, filt:['lowpass',500] }); },
   denied(){ const t = now(); tone({ type:'square', f:220, t, d:0.08, v:0.04 }); tone({ type:'square', f:180, t:t + 0.09, d:0.1, v:0.04 }); },
-  jump(dir){ const t = now(); noiseHit({ t, d:0.3, v:0.16, filt:['bandpass', dir > 0 ? 600 : 2600], f2:dir > 0 ? 3800 : 400, q:1.2 }); tone({ type:'sine', f:dir > 0 ? 200 : 500, f2:dir > 0 ? 620 : 150, t, d:0.25, v:0.08 }); },
+  jump(dir){ const t = now(); tone({ type:'sine', f:95, f2:38, t, d:0.35, v:0.45 }); noiseHit({ t, d:0.5, v:0.24, filt:['bandpass', dir > 0 ? 500 : 2600], f2:dir > 0 ? 3600 : 300, q:1.1, rev:0.2 }); tone({ type:'sawtooth', f:dir > 0 ? 140 : 420, f2:dir > 0 ? 520 : 110, t, d:0.4, v:0.06, filt:['lowpass',1400] }); },
   coin(){ const t = now(); tone({ type:'square', f:1318.5, t, d:0.06, v:0.03, filt:['lowpass',4000] }); tone({ type:'square', f:1975.5, t:t + 0.06, d:0.18, v:0.03, filt:['lowpass',4000], rev:0.3 }); },
   powerup(){ const t = now(); [0,4,7,12,16].forEach((s, i) => tone({ type:'triangle', f:523*Math.pow(2, s/12), t:t + i*0.05, d:0.3, v:0.07, rev:0.5 })); },
   lock(){ tone({ type:'sine', f:1760, t:now(), d:0.05, v:0.035 }); },
@@ -1646,7 +1675,7 @@ const SFX = {
 };
 const sfx = new Proxy(SFX, { get:(o, k) => (...args) => { if (audio && !game.muted && audio.ctx.state === 'running') { try { o[k](...args); } catch (e) {} } } });
 // music: four-chord minor loop in the key of each sky; layers come in with the action
-const ROOTS = [57, 52, 50, 55, 53];
+const ROOTS = [57, 52, 50, 55, 53, 54, 59, 48, 56];
 const PROG = [[0,3,7], [-4,0,3], [3,7,10], [-2,2,5]];
 const ARP = [0,1,2,1,2,1,0,2];
 function musicTick(){
@@ -1855,90 +1884,156 @@ document.querySelectorAll('#hangar .tab').forEach(t => t.onclick = () => { hanga
 $('mHangar').onclick = openHangar;
 $('hgBack').onclick = () => showPanel('menu');
 
-/* ================= MULTIPLAYER (PeerJS rooms; the free PeerJS server only introduces devices to each other) ================= */
-const MP = { peer:null, conns:new Map(), host:null, isHost:false, code:'', myId:'', players:new Map(), remotes:new Map(), inRoom:false, racing:false, course:'', sendT:0, listT:0 };
-const MP_PREFIX = 'starlane-room-v1-';
-function loadPeer(){
-  if (window.Peer) return Promise.resolve(true);
-  return new Promise(res => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js'; s.onload = () => res(!!window.Peer); s.onerror = () => res(false); document.head.appendChild(s); });
+/* ================= MULTIPLAYER =================
+   Rooms run over a public MQTT relay (WebSocket), so devices never need a direct connection:
+   both just need internet. Everyone in a room subscribes to starlane/v2/CODE/#.
+   The host publishes the lobby (retained) every 2 s as a heartbeat; racers publish their position ~10x a second. */
+const MP = { client:null, topic:'', isHost:false, hostId:'', code:'', myId:'', players:new Map(), remotes:new Map(), inRoom:false, racing:false, course:'', sendT:0, listT:0, beatT:0, hostSeen:0, joinTimer:null };
+MP.myId = Math.random().toString(36).slice(2, 10);
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+function loadMqtt(){
+  if (window.mqtt) return Promise.resolve(true);
+  return new Promise(res => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js'; s.onload = () => res(!!window.mqtt); s.onerror = () => res(false); document.head.appendChild(s); });
 }
+function tryBroker(url){
+  return new Promise(resolve => {
+    let done = false;
+    const cl = window.mqtt.connect(url, { clientId:'sl_' + MP.myId + '_' + Math.random().toString(36).slice(2, 6), connectTimeout:6000, reconnectPeriod:3000, clean:true, keepalive:20 });
+    const finish = ok => { if (done) return; done = true; if (ok) resolve(cl); else { try { cl.end(true); } catch (e) {} resolve(null); } };
+    cl.once('connect', () => finish(true));
+    cl.once('error', () => finish(false));
+    setTimeout(() => finish(false), 7000);
+  });
+}
+async function connectBroker(){ for (const url of BROKERS) { const c = await tryBroker(url); if (c) return c; } return null; }
 const mpStatus = t => { $('mpStatus').textContent = t || ''; };
 const myInfo = () => ({ name:(profile.name || 'Pilot').slice(0, 14), color:paintHex(), hull:profile.hull });
 const roomCode = () => { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; let s = ''; for (let i = 0; i < 4; i++) s += A[Math.floor(Math.random()*A.length)]; return s; };
-function mpNetError(e){
-  mpStatus(`Couldn't reach the matchmaking server (${e && e.type || 'network'}). Check your internet connection. Multiplayer doesn't run inside the claude.ai preview, only on the real site.`);
+function mpNetError(){
+  mpStatus("Couldn't reach the multiplayer relay. Check that this device is online. Multiplayer doesn't run inside the claude.ai preview, only on the real site.");
 }
 function openMp(){ initAudio(); MP.racing = false; mpRenderStandings(); $('mpName').value = profile.name || ''; mpRenderLobby(); showPanel('mp'); }
 function mpBack(){ if (MP.inRoom) mpLeave(); showPanel('menu'); }
+function mpPub(msg){ if (MP.client && MP.client.connected) MP.client.publish(MP.topic + '/m', JSON.stringify({ ...msg, from:MP.myId })); }
+function mpPublishLobby(){
+  if (!MP.isHost || !MP.client) return;
+  const players = [...MP.players].map(([id, p]) => [id, p.name, p.color, p.hull]);
+  MP.client.publish(MP.topic + '/room', JSON.stringify({ from:MP.myId, ts:Date.now(), players, course:MP.course }), { retain:true });
+  mpRenderLobby();
+}
+function roomTaken(cl, code){
+  return new Promise(res => {
+    const t = `starlane/v2/${code}/room`; let found = false;
+    const h = (topic, msg) => { if (topic !== t || !msg.length) return; try { const d = JSON.parse(msg.toString()); if (Math.abs(Date.now() - d.ts) < 15000) found = true; } catch (e) {} };
+    cl.on('message', h); cl.subscribe(t);
+    setTimeout(() => { cl.removeListener('message', h); cl.unsubscribe(t); res(found); }, 1200);
+  });
+}
+function setupRoom(cl, code, host){
+  MP.client = cl; MP.code = code; MP.topic = 'starlane/v2/' + code; MP.isHost = host;
+  cl.on('message', mpOnMessage);
+  cl.subscribe(MP.topic + '/#');
+  cl.on('reconnect', () => mpStatus('Reconnecting…'));
+  cl.on('connect', () => mpStatus(''));
+}
 async function mpCreate(){
   saveName(); mpStatus('Opening a room…');
-  if (!(await loadPeer())) return mpNetError({ type:'library' });
+  if (!(await loadMqtt())) return mpNetError();
   mpLeave(true);
-  const code = roomCode(), peer = new window.Peer(MP_PREFIX + code, { debug:0 }); MP.peer = peer;
-  peer.on('open', () => {
-    Object.assign(MP, { isHost:true, inRoom:true, code, myId:'host', course:randomCode() });
-    MP.players = new Map([['host', { ...myInfo(), gates:0, time:null }]]);
-    mpStatus(''); mpRenderLobby();
-  });
-  peer.on('connection', conn => {
-    conn.on('data', d => mpHostData(conn, d));
-    conn.on('close', () => { MP.conns.delete(conn.peer); MP.players.delete(conn.peer); removeRemote(conn.peer); mpBroadcastLobby(); });
-  });
-  peer.on('error', e => { if (e.type === 'unavailable-id') { peer.destroy(); mpCreate(); } else if (!MP.inRoom) mpNetError(e); });
-}
-function mpHostData(conn, d){
-  if (!d || typeof d !== 'object') return;
-  if (d.t === 'hello') {
-    MP.conns.set(conn.peer, conn);
-    MP.players.set(conn.peer, { name:String(d.name || 'Pilot').slice(0, 14), color:d.color|0, hull:HULL_SHAPES[d.hull] ? d.hull : 'dart', gates:0, time:null });
-    mpBroadcastLobby(); toast(`${String(d.name || 'Pilot').slice(0, 14)} joined`);
-  } else if (d.t === 'st') {
-    const p = MP.players.get(conn.peer); if (p) p.gates = d.g|0;
-    mpRemoteState(conn.peer, d); mpRelay({ ...d, id:conn.peer }, conn.peer);
-  } else if (d.t === 'fin') {
-    const p = MP.players.get(conn.peer); if (p) p.time = +d.time;
-    mpRelay({ t:'fin', id:conn.peer, time:+d.time }, conn.peer); mpRenderStandings();
-  }
-}
-function mpRelay(msg, except){ for (const [id, c] of MP.conns) if (id !== except && c.open) c.send(msg); }
-function mpBroadcastLobby(){
-  const players = [...MP.players].map(([id, p]) => [id, p.name, p.color, p.hull]);
-  for (const [id, c] of MP.conns) if (c.open) c.send({ t:'lobby', players, course:MP.course, you:id });
-  mpRenderLobby();
+  const cl = await connectBroker(); if (!cl) return mpNetError();
+  let code = roomCode();
+  for (let i = 0; i < 4 && await roomTaken(cl, code); i++) code = roomCode();
+  setupRoom(cl, code, true);
+  Object.assign(MP, { inRoom:true, hostId:MP.myId, course:randomCode() });
+  MP.players = new Map([[MP.myId, { ...myInfo(), gates:0, time:null, seen:performance.now() }]]);
+  mpPublishLobby(); mpStatus('');
 }
 async function mpJoin(code){
   saveName(); code = code.toUpperCase().replace(/[^A-Z]/g, '');
   if (code.length !== 4) { mpStatus('Room codes are 4 letters.'); return; }
   mpStatus('Joining room ' + code + '…');
-  if (!(await loadPeer())) return mpNetError({ type:'library' });
+  if (!(await loadMqtt())) return mpNetError();
   mpLeave(true);
-  const peer = new window.Peer({ debug:0 }); MP.peer = peer;
-  peer.on('open', () => {
-    const conn = peer.connect(MP_PREFIX + code, { reliable:true }); MP.host = conn;
-    conn.on('open', () => { Object.assign(MP, { inRoom:true, isHost:false, code }); conn.send({ t:'hello', ...myInfo() }); mpStatus(''); });
-    conn.on('data', d => mpClientData(d));
-    conn.on('close', () => { if (MP.inRoom) { toast('The host closed the room', true); mpLeave(); mpRenderLobby(); } });
-  });
-  peer.on('error', e => { if (e.type === 'peer-unavailable') mpStatus(`No room called ${code}. Check the code and try again.`); else if (!MP.inRoom) mpNetError(e); });
-  setTimeout(() => { if (MP.peer === peer && !MP.inRoom && $('mpStatus').textContent.startsWith('Joining')) mpStatus("Couldn't connect to that room. Both devices need internet, and some school or work networks block this."); }, 12000);
+  const cl = await connectBroker(); if (!cl) return mpNetError();
+  setupRoom(cl, code, false);
+  MP.joinTimer = setTimeout(() => {
+    if (MP.inRoom || MP.client !== cl) return;
+    mpLeave(true);
+    mpStatus(`No open room called ${code}. Check the code, and keep the room screen open on the host's device.`);
+  }, 7000);
 }
-function mpClientData(d){
-  if (!d || typeof d !== 'object') return;
-  if (d.t === 'lobby') {
-    MP.myId = d.you; MP.course = String(d.course || '');
+function mpOnMessage(topic, payload, packet){
+  if (!payload || !payload.length) return;
+  let d; try { d = JSON.parse(payload.toString()); } catch (e) { return; }
+  if (!d || typeof d !== 'object' || d.from === MP.myId) return;
+  const now = performance.now();
+  if (topic.endsWith('/room')) {
+    if (MP.isHost) return;
+    if (packet && packet.retain && !(Math.abs(Date.now() - d.ts) < 15000)) return;   // a stale room left behind
+    MP.hostSeen = now; MP.hostId = d.from; MP.course = String(d.course || '');
     const old = MP.players;
-    MP.players = new Map(d.players.map(([id, name, color, hull]) => [id, { name:String(name).slice(0, 14), color:color|0, hull:HULL_SHAPES[hull] ? hull : 'dart', gates:(old.get(id) || {}).gates || 0, time:(old.get(id) || {}).time ?? null }]));
+    MP.players = new Map((d.players || []).map(([id, name, color, hull]) => [id, { name:String(name).slice(0, 14), color:color|0, hull:HULL_SHAPES[hull] ? hull : 'dart', gates:(old.get(id) || {}).gates || 0, time:(old.get(id) || {}).time ?? null }]));
     for (const id of [...MP.remotes.keys()]) if (!MP.players.has(id)) removeRemote(id);
+    if (!MP.inRoom) { MP.inRoom = true; clearTimeout(MP.joinTimer); mpStatus(''); mpPub({ t:'hello', ...myInfo() }); }
+    else if (!MP.players.has(MP.myId)) mpPub({ t:'hello', ...myInfo() });
     mpRenderLobby();
-  } else if (d.t === 'start') mpBeginRace(String(d.course));
-  else if (d.t === 'st') { if (d.id !== MP.myId) { const p = MP.players.get(d.id); if (p) p.gates = d.g|0; mpRemoteState(d.id, d); } }
-  else if (d.t === 'fin') { const p = MP.players.get(d.id); if (p) p.time = +d.time; mpRenderStandings(); }
+    return;
+  }
+  const p = MP.players.get(d.from);
+  if (MP.isHost && p) p.seen = now;
+  switch (d.t) {
+    case 'hello':
+      if (!MP.isHost) return;
+      if (!p) toast(`${String(d.name || 'Pilot').slice(0, 14)} joined`);
+      MP.players.set(d.from, { name:String(d.name || 'Pilot').slice(0, 14), color:d.color|0, hull:HULL_SHAPES[d.hull] ? d.hull : 'dart', gates:p ? p.gates : 0, time:p ? p.time : null, seen:now });
+      mpPublishLobby(); break;
+    case 'st': if (p) { p.gates = d.g|0; mpRemoteState(d.from, d); } break;
+    case 'fin': if (p) { p.time = +d.time; mpRenderStandings(); } break;
+    case 'start': if (d.from === MP.hostId && !MP.isHost) mpBeginRace(String(d.course)); break;
+    case 'bye':
+      if (MP.isHost) { MP.players.delete(d.from); removeRemote(d.from); mpPublishLobby(); }
+      else if (d.from === MP.hostId) { toast('The host closed the room', true); mpLeave(); mpRenderLobby(); }
+      break;
+  }
+}
+function mpTick(dt){
+  if (!MP.inRoom || !MP.client) return;
+  const now = performance.now();
+  MP.beatT -= dt;
+  if (MP.beatT <= 0) {
+    MP.beatT = 2;
+    if (MP.isHost) {
+      let changed = false;
+      for (const [id, p] of MP.players) if (id !== MP.myId && now - (p.seen || 0) > 9000) { MP.players.delete(id); removeRemote(id); changed = true; }
+      mpPublishLobby(); if (changed) mpRenderStandings();
+    } else {
+      mpPub({ t:'beat' });
+      if (now - MP.hostSeen > 9000) { toast('Lost the connection to the host', true); mpLeave(); mpRenderLobby(); return; }
+    }
+  }
+  if (MP.racing) {
+    MP.sendT -= dt;
+    if (MP.sendT <= 0) {
+      MP.sendT = 0.1;
+      const r = x => Math.round(x*100)/100;
+      mpPub({ t:'st', p:[r(ship.pos.x), r(ship.pos.y), r(ship.pos.z), r(ship.yaw), r(ship.pitch), r(ship.roll)], v:[r(ship.vel.x), r(ship.vel.y), r(ship.vel.z)], g:game.gatesDone });
+      const me = MP.players.get(MP.myId); if (me) me.gates = game.gatesDone;
+    }
+  }
 }
 function mpLeave(quiet){
-  if (MP.peer) { try { MP.peer.destroy(); } catch (e) {} }
+  const cl = MP.client;
+  if (cl) {
+    try {
+      if (MP.inRoom) mpPub({ t:'bye' });
+      if (MP.isHost && MP.inRoom) cl.publish(MP.topic + '/room', '', { retain:true });   // clears the room
+      setTimeout(() => { try { cl.end(true); } catch (e) {} }, 300);
+    } catch (e) {}
+  }
+  clearTimeout(MP.joinTimer);
   for (const id of [...MP.remotes.keys()]) removeRemote(id);
-  Object.assign(MP, { peer:null, host:null, isHost:false, code:'', myId:'', inRoom:false, racing:false });
-  MP.conns = new Map(); MP.players = new Map();
+  Object.assign(MP, { client:null, topic:'', isHost:false, hostId:'', code:'', inRoom:false, racing:false });
+  MP.players = new Map();
   if (!quiet) mpStatus('');
   mpRenderLobby(); mpRenderStandings();
 }
@@ -1948,7 +2043,7 @@ function mpRenderLobby(){
   $('mpBack').textContent = MP.inRoom ? '← Leave room' : '← Back';
   if (!MP.inRoom) return;
   $('mpRoom').textContent = MP.code; $('mpCourse').textContent = MP.course || '-----';
-  $('mpPlayers').innerHTML = [...MP.players].map(([id, p]) => `<div class="pl"><i style="background:${hexStr(p.color)}"></i>${esc(p.name)}${id === MP.myId ? ' <span class="lbl">you</span>' : ''}${id === 'host' ? ' <span class="lbl">host</span>' : ''}</div>`).join('');
+  $('mpPlayers').innerHTML = [...MP.players].map(([id, p]) => `<div class="pl"><i style="background:${hexStr(p.color)}"></i>${esc(p.name)}${id === MP.myId ? ' <span class="lbl">you</span>' : ''}${id === MP.hostId ? ' <span class="lbl">host</span>' : ''}</div>`).join('');
   $('mpHostBtns').hidden = !MP.isHost; $('mpWait').hidden = MP.isHost;
 }
 function saveName(){ const v = $('mpName').value.trim().slice(0, 14); if (v !== profile.name) { profile.name = v; saveProfile(); } }
@@ -1956,14 +2051,6 @@ function mpBeginRace(courseCode){
   MP.course = courseCode; MP.racing = true;
   for (const p of MP.players.values()) { p.gates = 0; p.time = null; }
   openTrial(courseCode, true); startTrial();
-}
-function mpSend(dt){
-  if (!MP.inRoom || !MP.racing) return;
-  MP.sendT -= dt; if (MP.sendT > 0) return; MP.sendT = 1/12;
-  const r = x => Math.round(x*100)/100;
-  const msg = { t:'st', id:MP.myId, p:[r(ship.pos.x), r(ship.pos.y), r(ship.pos.z), r(ship.yaw), r(ship.pitch), r(ship.roll)], v:[r(ship.vel.x), r(ship.vel.y), r(ship.vel.z)], g:game.gatesDone };
-  if (MP.isHost) mpRelay(msg); else if (MP.host && MP.host.open) MP.host.send(msg);
-  const me = MP.players.get(MP.myId); if (me) me.gates = game.gatesDone;
 }
 function nameSprite(text, color){
   const c = document.createElement('canvas'); c.width = 256; c.height = 64; const x = c.getContext('2d');
@@ -2011,10 +2098,10 @@ $('mMulti').onclick = openMp;
 $('mpCreate').onclick = mpCreate;
 $('mpJoinForm').addEventListener('submit', e => { e.preventDefault(); mpJoin($('mpCode').value); });
 $('mpBack').onclick = mpBack;
-$('mpGo').onclick = () => { if (!MP.isHost) return; mpRelay({ t:'start', course:MP.course }); mpBeginRace(MP.course); };
-$('mpReroll').onclick = () => { MP.course = randomCode(); mpBroadcastLobby(); };
+$('mpGo').onclick = () => { if (!MP.isHost) return; mpPub({ t:'start', course:MP.course }); mpBeginRace(MP.course); };
+$('mpReroll').onclick = () => { MP.course = randomCode(); mpPublishLobby(); };
 $('mpName').addEventListener('change', saveName);
-addEventListener('beforeunload', () => { if (MP.peer) try { MP.peer.destroy(); } catch (e) {} });
+addEventListener('pagehide', () => { if (MP.inRoom) mpLeave(true); });
 
 /* ================= MODES ================= */
 function resetShip(s, v){
@@ -2138,8 +2225,7 @@ function finishRun(){
   if (isBest) { game.best = { time:t, splits:game.splits.slice(), ghost:game.rec }; store.set('best2:' + game.trialCode, game.best); }
   if (MP.inRoom && MP.racing) {
     const me = MP.players.get(MP.myId); if (me) me.time = t;
-    const msg = { t:'fin', id:MP.myId, time:t };
-    if (MP.isHost) mpRelay(msg); else if (MP.host && MP.host.open) MP.host.send(msg);
+    mpPub({ t:'fin', time:t });
   }
   $('resTrack').textContent = 'Course ' + game.trialCode;
   $('resTime').textContent = fmt(t);
@@ -2257,9 +2343,9 @@ function damageShield(x){
 function doJump(dir){
   if (!playingNow() || game.paused || ship.stall > 0) return;
   const free = ship.overdrive > 0;
-  if (ship.jumpCd > 0) return;
-  if (!free && (ship.boostLock || ship.boost < JUMP_COST)) { sfx.denied(); return; }
-  ship.jumpV = 55*dir; ship.jumpCd = 0.45;
+  if (ship.jumpCd > 0 || (!free && (ship.boostLock || ship.boost < JUMP_COST))) { sfx.denied(); return; }
+  ship.jumpV = JUMP_V*dir; ship.jumpCd = JUMP_CD; ship.pitchKick = 0.32*dir;
+  game.shake = Math.min(1, game.shake + 0.35); game.kick = Math.max(game.kick, 0.25);
   if (!free) { ship.boost -= JUMP_COST; if (ship.boost <= 0.01) { ship.boost = 0; ship.boostLock = true; } }
   sfx.jump(dir);
 }
@@ -2343,7 +2429,8 @@ function physics(dt, inp){
   _e.set(ship.pitch, ship.yaw, 0, 'YXZ'); ship.upNR.set(0, 1, 0).applyQuaternion(_q.setFromEuler(_e));
   ship.vel.lerp(_v.copy(ship.fwd).multiplyScalar(ship.v + ship.burst), damp(3.5, dt));
   if (st === 'countdown') ship.vel.set(0, 0, 0);
-  ship.jumpV *= Math.exp(-5*dt); ship.jumpCd -= dt;
+  ship.jumpV *= Math.exp(-3*dt); ship.jumpCd = Math.max(0, ship.jumpCd - dt);
+  ship.pitchKick *= Math.exp(-4.5*dt); ship.jumpDisp += ship.jumpV*dt;
   ship.pos.addScaledVector(ship.vel, dt).addScaledVector(ship.upNR, ship.jumpV*dt);
   ship.odo += ship.vel.length()*dt;
 
@@ -2360,7 +2447,7 @@ function physics(dt, inp){
 }
 
 /* ================= CAMERA ================= */
-const cam = { off:new V3(), up:new V3(0,1,0), cine:null, snap:true, fov:70, mode:-1 };
+const cam = { off:new V3(), up:new V3(0,1,0), cine:null, snap:true, fov:70, mode:-1, jy:0 };
 function insideRock(p, pad){
   for (const seg of course.segs) for (const rk of seg.rocks) if (rk.alive && p.distanceTo(rk.c) < rk.r*1.15 + pad) return true;
   for (const rk of ambWorld) if (rk.alive && p.distanceTo(rk.c) < rk.r*1.15 + pad) return true;
@@ -2374,9 +2461,10 @@ function updateCamera(dt, boosting){
   if (mode === 0) {
     const up = ship.upNR;
     _v.copy(ship.fwd).multiplyScalar(-12).addScaledVector(up, 3.6);
-    if (cam.snap) { cam.off.copy(_v); cam.up.copy(up); } else cam.off.lerp(_v, damp(7, dt));
+    if (cam.snap) { cam.off.copy(_v); cam.up.copy(up); cam.jy = ship.jumpDisp; } else cam.off.lerp(_v, damp(7, dt));
     cam.up.lerp(up, damp(5, dt)).normalize();
-    camera.position.copy(ship.pos).add(cam.off);
+    cam.jy += (ship.jumpDisp - cam.jy) * damp(4.5, dt);   // camera trails the jump so it reads as weight
+    camera.position.copy(ship.pos).add(cam.off).addScaledVector(up, -(ship.jumpDisp - cam.jy)*0.75);
     camera.up.copy(cam.up);
     camera.lookAt(_v2.copy(ship.pos).addScaledVector(ship.fwd, 14).addScaledVector(up, 0.8));
     fov = 66 + sp*22 + (boosting ? 6 : 0);
@@ -2524,7 +2612,7 @@ function tick(now){
   updatePickups(T);
 
   // ship transform
-  _e.set(ship.pitch, ship.yaw, ship.roll, 'YXZ');
+  _e.set(ship.pitch + ship.pitchKick, ship.yaw, ship.roll, 'YXZ');
   shipRoot.quaternion.setFromEuler(_e);
   shipRoot.position.copy(ship.pos);
   SHIP.hullG.position.y = Math.sin(T*1.7)*0.05;
@@ -2561,7 +2649,7 @@ function tick(now){
     } else ghostRoot.visible = false;
   } else ghostRoot.visible = false;
 
-  updateRemotes(dt); mpSend(dt);
+  updateRemotes(dt); mpTick(dt);
   MP.listT -= dt; if (MP.racing && MP.listT <= 0) { MP.listT = 0.5; mpRenderStandings(); }
 
   updateCamera(dt, boosting);
@@ -2591,6 +2679,9 @@ function tick(now){
   $('shieldFill').style.width = (sf*100).toFixed(1) + '%'; $('shieldFill').classList.toggle('low', sf < 0.3);
   $('boostTrack').classList.toggle('locked', ship.boostLock); $('boostLbl').classList.toggle('locked', ship.boostLock);
   setText('boostLbl', ship.overdrive > 0 ? 'Overdrive' : ship.boostLock ? 'Recharge' : 'Boost');
+  { const jf = 1 - ship.jumpCd/JUMP_CD, ready = jf >= 1 && (ship.overdrive > 0 || (!ship.boostLock && ship.boost >= JUMP_COST));
+    $('jumpFill').style.width = (jf*100).toFixed(1) + '%'; $('jumpFill').classList.toggle('cool', !ready);
+    $('tJumpU').classList.toggle('cool', !ready); $('tJumpD').classList.toggle('cool', !ready); }
   if (game.mode === 'trial') {
     setText('timer', fmt(game.state === 'countdown' ? 0 : game.state === 'finished' ? game.splits[game.splits.length-1] : raceTime()));
     $('progFill').style.width = (clamp(ship.s/course.finish, 0, 1)*100).toFixed(2) + '%';

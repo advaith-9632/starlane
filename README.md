@@ -17,9 +17,9 @@ Fly freely in 3D through open space. The route is marked by glowing rings, a dri
 - **Asteroids** have health based on their size. Your guns lock on to the rock in front of you automatically; small ones also break if you ram them at boost speed, at a cost to your shield.
 - **Shield**: crashing drains it. At zero you get a hull breach and stall for a moment.
 - **Pickups**: coins, shield cells (green) and overdrive (orange, unlimited boost for 5 seconds).
-- **Boost** locks out when you run it dry and comes back once it refills to 30%. **Jumps** dodge straight up or down for 20% boost.
+- **Boost** locks out when you run it dry and comes back once it refills to 30%. **Jumps** throw you about 30 m straight up or down for 20% boost, with a 1.6 s cooldown.
 
-There are five skies: Nebula Drift, Amber Reach, Glacier Belt, Aurora Void and Crimson Giant. Each has its own music key.
+There are nine skies: Nebula Drift, Amber Reach, Glacier Belt, Aurora Void, Crimson Giant, Ion Storm, Rose Quartz, Event Horizon and Coral Reef. Each has its own music key.
 
 ## Controls
 
@@ -55,4 +55,4 @@ node serve.mjs
 
 Then open http://localhost:8137.
 
-Multiplayer uses [PeerJS](https://peerjs.com/): its free public server introduces the devices, then they talk to each other directly over WebRTC.
+Multiplayer passes messages through a free public MQTT relay (EMQX, with HiveMQ as a fallback) over a secure WebSocket, so devices never need a direct connection. Room traffic is public on that relay, so only player names and ship positions are sent.
